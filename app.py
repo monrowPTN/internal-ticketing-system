@@ -1,24 +1,24 @@
+from dotenv import load_dotenv
+load_dotenv()
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy  # ✅ Step 1
+from flask_sqlalchemy import SQLAlchemy
 from email.mime.text import MIMEText
 import smtplib, os
-from dotenv import load_dotenv
 
 # Load .env file
-load_dotenv()
 print("EMAIL_USER from .env:", os.getenv("EMAIL_USER"))
 
 # Flask app setup
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://tickets.local:3000"])
 
-# ✅ Step 1: SQLAlchemy config
+# SQLAlchemy config
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tickets.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# ✅ Step 2: Ticket model
+# Ticket model
 class Ticket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(100))
@@ -27,6 +27,7 @@ class Ticket(db.Model):
     subject = db.Column(db.String(200))
     message = db.Column(db.Text)
 
+# Submit ticket endpoint
 @app.route('/submit-ticket', methods=['POST'])
 def submit_ticket():
     data = request.json
@@ -36,7 +37,7 @@ def submit_ticket():
     message = data.get('message')
     subject = data.get('subject', 'New Internal Ticket')
 
-    # ✅ Save to database
+    # Save to database
     ticket = Ticket(
         full_name=full_name,
         department=department,
@@ -51,11 +52,13 @@ def submit_ticket():
     if not email.endswith('@dubizzle.com.lb'):
         return jsonify({'status': 'forbidden'}), 403
 
+    # Send email
     body = f"From: {full_name}\nDepartment: {department}\nEmail: {email}\n\nMessage:\n{message}"
     send_email(subject, body)
 
     return jsonify({'status': 'success'})
 
+# Send email function
 def send_email(subject, body):
     sender = os.getenv("EMAIL_USER")
     password = os.getenv("EMAIL_PASS")
@@ -70,6 +73,7 @@ def send_email(subject, body):
         smtp.login(sender, password)
         smtp.sendmail(sender, receiver, msg.as_string())
 
+# Get all tickets
 @app.route('/tickets', methods=['GET'])
 def get_tickets():
     tickets = Ticket.query.order_by(Ticket.id.desc()).all()
@@ -85,5 +89,11 @@ def get_tickets():
     ]
     return jsonify(tickets_list)
 
+# Home route for Render root access
+@app.route('/', methods=['GET'])
+def home():
+    return "Internal Ticketing System is running ✅"
+
+# Run Flask app
 if __name__ == '__main__':
     app.run(debug=True, port=5050)
