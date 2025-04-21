@@ -11,7 +11,12 @@ print("EMAIL_USER from .env:", os.getenv("EMAIL_USER"))
 
 # Flask app setup
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://tickets.local:3000"])
+CORS(app, origins=[
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://tickets.local:3000",
+    "https://olx-ticketing-frontend.vercel.app"
+])
 
 # SQLAlchemy config
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tickets.db'
