@@ -1,24 +1,27 @@
 from dotenv import load_dotenv
 load_dotenv()
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from email.mime.text import MIMEText
 import smtplib, os
 
-# Load .env file
-print("EMAIL_USER from .env:", os.getenv("EMAIL_USER"))
+# ✅ Correct Order:
 
-# Flask app setup
-app = Flask(__name__)
+app = Flask(__name__)   # Create Flask app FIRST
+
 CORS(app, origins=[
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
     "http://tickets.local:3000",
+    "http://tickets.local:3001",
     "https://olx-ticketing-frontend.vercel.app"
 ])
 
-# SQLAlchemy config
+# Database config
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tickets.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -31,37 +34,59 @@ class Ticket(db.Model):
     email = db.Column(db.String(100))
     subject = db.Column(db.String(200))
     message = db.Column(db.Text)
+    status = db.Column(db.String(50), default='Received')
 
-# Submit ticket endpoint
+# Submit Ticket Endpoint
 @app.route('/submit-ticket', methods=['POST'])
 def submit_ticket():
-    data = request.json
+    if request.method != 'POST':
+        return jsonify({'error': 'Method Not Allowed'}), 405
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({'error': 'Invalid JSON received'}), 400
+
     full_name = data.get('full_name')
     department = data.get('department')
     email = data.get('email')
+    subject_raw = data.get('subject', 'New Internal Ticket')
     message = data.get('message')
-    subject = data.get('subject', 'New Internal Ticket')
 
-    # Save to database
+    if not all([full_name, department, email, subject_raw, message]):
+        return jsonify({'error': 'Missing fields'}), 400
+
+    if not email.endswith('@dubizzle.com.lb'):
+        return jsonify({'status': 'forbidden'}), 403
+
     ticket = Ticket(
         full_name=full_name,
         department=department,
         email=email,
-        subject=subject,
+        subject=subject_raw,
         message=message
     )
     db.session.add(ticket)
     db.session.commit()
 
-    # Optional email domain restriction
-    if not email.endswith('@dubizzle.com.lb'):
-        return jsonify({'status': 'forbidden'}), 403
+    ticket_id = ticket.id
 
-    # Send email
-    body = f"From: {full_name}\nDepartment: {department}\nEmail: {email}\n\nMessage:\n{message}"
-    send_email(subject, body)
+    subject_with_id = f"[Ticket #{ticket_id}] {subject_raw}"
+    body = f"""\
+🎫 Ticket #{ticket_id}
 
-    return jsonify({'status': 'success'})
+📌 Service Type: {subject_with_id}
+🧑 Name: {full_name}
+🏢 Department: {department}
+✉️ Email: {email}
+
+📝 Message:
+{message}
+"""
+
+        # send_email(subject_with_id, body)
+
+    return jsonify({'status': 'success', 'ticket_id': ticket_id})
 
 # Send email function
 def send_email(subject, body):
@@ -78,27 +103,11 @@ def send_email(subject, body):
         smtp.login(sender, password)
         smtp.sendmail(sender, receiver, msg.as_string())
 
-# Get all tickets
-@app.route('/tickets', methods=['GET'])
-def get_tickets():
-    tickets = Ticket.query.order_by(Ticket.id.desc()).all()
-    tickets_list = [
-        {
-            "id": ticket.id,
-            "full_name": ticket.full_name,
-            "department": ticket.department,
-            "email": ticket.email,
-            "subject": ticket.subject,
-            "message": ticket.message
-        } for ticket in tickets
-    ]
-    return jsonify(tickets_list)
-
-# Home route for Render root access
+# Root Endpoint
 @app.route('/', methods=['GET'])
 def home():
     return "Internal Ticketing System is running ✅"
 
-# Run Flask app
+# Run the app
 if __name__ == '__main__':
     app.run(debug=True, port=5050)
