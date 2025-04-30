@@ -7,10 +7,8 @@ from flask_sqlalchemy import SQLAlchemy
 from email.mime.text import MIMEText
 import smtplib, os
 
-# ✅ Correct Order:
-
-app = Flask(__name__)   # Create Flask app FIRST
-
+# ✅ Flask App Setup
+app = Flask(__name__)
 CORS(app, origins=[
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -21,12 +19,12 @@ CORS(app, origins=[
     "https://olx-ticketing-frontend.vercel.app"
 ])
 
-# Database config
+# ✅ Database Config
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tickets.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Ticket model
+# ✅ Ticket Model
 class Ticket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(100))
@@ -36,12 +34,9 @@ class Ticket(db.Model):
     message = db.Column(db.Text)
     status = db.Column(db.String(50), default='Received')
 
-# Submit Ticket Endpoint
+# ✅ Submit Ticket Endpoint
 @app.route('/submit-ticket', methods=['POST'])
 def submit_ticket():
-    if request.method != 'POST':
-        return jsonify({'error': 'Method Not Allowed'}), 405
-
     data = request.get_json()
 
     if not data:
@@ -84,11 +79,11 @@ def submit_ticket():
 {message}
 """
 
-        # send_email(subject_with_id, body)
+    send_email(subject_with_id, body)
 
     return jsonify({'status': 'success', 'ticket_id': ticket_id})
 
-# Send email function
+# ✅ Send Email Function
 def send_email(subject, body):
     sender = os.getenv("EMAIL_USER")
     password = os.getenv("EMAIL_PASS")
@@ -103,12 +98,12 @@ def send_email(subject, body):
         smtp.login(sender, password)
         smtp.sendmail(sender, receiver, msg.as_string())
 
-# Root Endpoint
+# ✅ Root Route
 @app.route('/', methods=['GET'])
 def home():
     return "Internal Ticketing System is running ✅"
 
-# Run the app
+# ✅ Launch App with DB Reset
 if __name__ == '__main__':
     with app.app_context():
         db.drop_all()
