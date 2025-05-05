@@ -36,14 +36,14 @@ class Ticket(db.Model):
     description = db.Column(db.Text)
     status = db.Column(db.String, default='Received')
     service_type = db.Column(db.String)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # ✅ fixed typo
 
 # ✅ Submit Ticket Endpoint — rewritten to match Supabase fields
 @app.route('/submit-ticket', methods=['POST'])
 def submit_ticket():
     data = request.get_json()
 
-print("🔁 Incoming data:", data)  # test what the frontend sends
+    print("🔁 Incoming data:", data)  # ✅ fixed indentation
     
     if not data:
         return jsonify({'error': 'Invalid JSON received'}), 400
@@ -54,7 +54,8 @@ print("🔁 Incoming data:", data)  # test what the frontend sends
     service_type = data.get('subject')  # subject → service_type
     description = data.get('message')
 
-    if not all([name, department, email, service_type, description]):
+    # ✅ Removed department from required fields
+    if not all([name, email, service_type, description]):
         return jsonify({'error': 'Missing fields'}), 400
 
     if not email.endswith('@dubizzle.com.lb'):
@@ -70,6 +71,8 @@ print("🔁 Incoming data:", data)  # test what the frontend sends
         )
         db.session.add(ticket)
         db.session.commit()
+
+        print("✅ Ticket inserted:", ticket.id)  # ✅ log insert
 
         ticket_id = ticket.id
         subject_with_id = f"[Ticket #{ticket_id}] {service_type}"
