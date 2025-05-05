@@ -25,6 +25,7 @@ CORS(app, origins=[
 
 # ✅ SQLAlchemy config (after app is initialized)
 from flask_sqlalchemy import SQLAlchemy
+print("✅ DB URL loaded:", os.environ.get("SUPABASE_DB_URL"))
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SUPABASE_DB_URL')  # Uses Neon
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
