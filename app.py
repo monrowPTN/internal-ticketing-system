@@ -6,6 +6,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from email.mime.text import MIMEText
 import smtplib, os
+from datetime import datetime
 
 # ✅ Flask App Setup
 app = Flask(__name__)
@@ -19,22 +20,24 @@ CORS(app, origins=[
     "https://olx-ticketing-frontend.vercel.app"
 ])
 
-# ✅ Database Config
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tickets.db'
+# ✅ Database Config (Now Supabase)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SUPABASE_DB_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# ✅ Ticket Model
+# ✅ Ticket Model — updated to match Supabase
 class Ticket(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    full_name = db.Column(db.String(100))
-    department = db.Column(db.String(100))
-    email = db.Column(db.String(100))
-    subject = db.Column(db.String(200))
-    message = db.Column(db.Text)
-    status = db.Column(db.String(50), default='Received')
+    __tablename__ = 'tickets'  # Supabase table name
 
-# ✅ Submit Ticket Endpoint
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String)
+    email = db.Column(db.String)
+    description = db.Column(db.Text)
+    status = db.Column(db.String, default='Received')
+    service_type = db.Column(db.String)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# ✅ Submit Ticket Endpoint — rewritten to match Supabase fields
 @app.route('/submit-ticket', methods=['POST'])
 def submit_ticket():
     data = request.get_json()
@@ -42,46 +45,51 @@ def submit_ticket():
     if not data:
         return jsonify({'error': 'Invalid JSON received'}), 400
 
-    full_name = data.get('full_name')
-    department = data.get('department')
+    name = data.get('full_name')  # full_name maps to 'name' in DB
+    department = data.get('department')  # Ignored for now
     email = data.get('email')
-    subject_raw = data.get('subject', 'New Internal Ticket')
-    message = data.get('message')
+    service_type = data.get('subject')  # subject → service_type
+    description = data.get('message')
 
-    if not all([full_name, department, email, subject_raw, message]):
+    if not all([name, department, email, service_type, description]):
         return jsonify({'error': 'Missing fields'}), 400
 
     if not email.endswith('@dubizzle.com.lb'):
         return jsonify({'status': 'forbidden'}), 403
 
-    ticket = Ticket(
-        full_name=full_name,
-        department=department,
-        email=email,
-        subject=subject_raw,
-        message=message
-    )
-    db.session.add(ticket)
-    db.session.commit()
+    try:
+        ticket = Ticket(
+            name=name,
+            email=email,
+            service_type=service_type,
+            description=description,
+            status="Received"
+        )
+        db.session.add(ticket)
+        db.session.commit()
 
-    ticket_id = ticket.id
+        ticket_id = ticket.id
+        subject_with_id = f"[Ticket #{ticket_id}] {service_type}"
 
-    subject_with_id = f"[Ticket #{ticket_id}] {subject_raw}"
-    body = f"""\
+        body = f"""\
 🎫 Ticket #{ticket_id}
 
-📌 Service Type: {subject_with_id}
-🧑 Name: {full_name}
-🏢 Department: {department}
-✉️ Email: {email}
+Service Type: {service_type}
+Name: {name}
+Department: {department}
+Email: {email}
 
-📝 Message:
-{message}
+Message:
+{description}
 """
 
-    send_email(subject_with_id, body)
+        send_email(subject_with_id, body)
 
-    return jsonify({'status': 'success', 'ticket_id': ticket_id})
+        return jsonify({'status': 'success', 'ticket_id': ticket_id})
+
+    except Exception as e:
+        print("❌ DB Error:", e)
+        return jsonify({'error': 'Failed to save ticket'}), 500
 
 # ✅ Send Email Function
 def send_email(subject, body):
@@ -106,7 +114,4 @@ def home():
 # ✅ Launch App with DB Reset
 if __name__ == '__main__':
     with app.app_context():
-        db.drop_all()
-        db.create_all()
-
-    app.run(debug=True, port=5050)
+        app.run(debug=True, port=5050)
