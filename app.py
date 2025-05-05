@@ -21,6 +21,7 @@ CORS(app, origins=[
 ])
 
 # ✅ Database Config (Now Supabase)
+print("✅ DB URL:", os.environ.get('SUPABASE_DB_URL'))
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SUPABASE_DB_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -42,6 +43,8 @@ class Ticket(db.Model):
 def submit_ticket():
     data = request.get_json()
 
+print("🔁 Incoming data:", data)  # test what the frontend sends
+    
     if not data:
         return jsonify({'error': 'Invalid JSON received'}), 400
 
