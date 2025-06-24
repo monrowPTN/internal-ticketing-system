@@ -43,7 +43,7 @@ class Ticket(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # ✅ Submit Ticket Endpoint
-@app.route('/submit-ticket', methods=['POST'])
+@app.route('/submit', methods=['POST'])
 def submit_ticket():
     data = request.get_json()
     print("🔁 Incoming data:", data)
