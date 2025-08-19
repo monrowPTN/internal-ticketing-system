@@ -42,6 +42,11 @@ class Ticket(db.Model):
     service_type = db.Column(db.String)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+from time import time
+
+# Track last submission times by email
+last_submission_times = {}
+
 # ✅ Submit Ticket Endpoint
 @app.route('/tickets', methods=['POST'])
 def submit_ticket():
@@ -51,21 +56,51 @@ def submit_ticket():
     if not data:
         return jsonify({'error': 'Invalid JSON received'}), 400
 
-    name = data.get('full_name')
+        name = data.get('full_name')
     department = data.get('department')
-    email = data.get('email')
+    # ✅ normalize email early
+    email = (data.get('email') or "").strip().lower()
     service_type = data.get('subject')
     description = data.get('message')
 
     if not all([name, email, service_type, description]):
         return jsonify({'error': 'Missing fields'}), 400
 
-    if not email.endswith('@dubizzle.com.lb'):
-        return jsonify({'status': 'forbidden'}), 403
+    # ✅ get allowed domain from env (fallback to @olx.com.lb)
+    allowed_domain = (os.getenv("ALLOWED_DOMAIN", "@olx.com.lb") or "").strip().lower()
+
+    # ✅ DEBUG: print exactly what we’re checking (repr shows hidden spaces)
+    print(f"🔎 EMAIL={repr(email)}  ALLOWED_DOMAIN={repr(allowed_domain)}")
+
+    # ✅ strict end-of-string match (regex) to avoid weird edge cases
+    import re
+    if not re.search(re.escape(allowed_domain) + r'$', email):
+        return jsonify({
+            'status': 'forbidden',
+            'message': f'Only {allowed_domain} emails are allowed'
+        }), 403
+
+    # ✅ NEW: Check for rapid duplicate submissions (same email within 10 seconds)
+    now = time()
+    if email in last_submission_times and now - last_submission_times[email] < 10:
+        return jsonify({'error': 'Duplicate submission detected. Please wait a few seconds before trying again.'}), 429
+
+    # ✅ Update last submission time
+    last_submission_times[email] = now
 
     try:
-        # 🔁 Now inside your /submit-ticket route:
-        # ✅ Insert the ticket into the Neon database
+        # ✅ Check if duplicate already in DB
+        existing_ticket = Ticket.query.filter_by(
+            email=email,
+            service_type=service_type,
+            description=description,
+            status="Received"
+        ).first()
+
+        if existing_ticket:
+            return jsonify({'error': 'Duplicate ticket already exists.'}), 409
+
+        # 🔁 Insert the ticket into the Neon database
         ticket = Ticket(
             name=name,
             email=email,
@@ -73,10 +108,11 @@ def submit_ticket():
             description=description,
             status="Received"
         )
+
         db.session.add(ticket)
         db.session.commit()
 
-        ticket_id = ticket.id  # ✅ Use the real ticket ID from Neon DB
+        ticket_id = ticket.id  # ✅ Get the real ticket ID from Neon DB
 
         subject_with_id = f"[Ticket #{ticket_id}] {service_type}"
 
@@ -95,7 +131,7 @@ Message:
         send_email(subject_with_id, body)
         print(f"✅ Ticket #{ticket_id} submitted and email sent.")
 
-        return jsonify({'status': 'success', 'ticket_id': ticket_id})
+        return jsonify({'status': 'success', 'ticket_id': ticket_id}), 201
 
     except Exception as e:
         print("❌ Runtime Error:", e)
