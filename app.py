@@ -5,23 +5,30 @@ load_dotenv()
 # ✅ Flask core libraries
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+# ✅ Added required imports
+import os, re, smtplib
 from email.mime.text import MIMEText
-import smtplib, os
 from datetime import datetime
 
-# ✅ Initialize Flask app FIRST (before referencing config)
-app = Flask(__name__)  # ❗️Moved up (needed before config settings)
+# ✅ Initialize Flask app BEFORE using CORS
+app = Flask(__name__)
 
-# ✅ Set up CORS to allow frontend domains
-CORS(app, origins=[
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3001",
-    "http://tickets.local:3000",
-    "http://tickets.local:3001",
-    "https://olx-ticketing-frontend.vercel.app"
-])
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+            "http://tickets.local:3000",
+            "http://tickets.local:3001",
+            "https://olx-ticketing-frontend.vercel.app",
+            re.compile(r"https://.*\.vercel\.app")   # ✅ compiled regex for any Vercel URL
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # ✅ SQLAlchemy config (after app is initialized)
 from flask_sqlalchemy import SQLAlchemy
@@ -56,29 +63,21 @@ def submit_ticket():
     if not data:
         return jsonify({'error': 'Invalid JSON received'}), 400
 
-        name = data.get('full_name')
+    name = data.get('full_name')
     department = data.get('department')
-    # ✅ normalize email early
-    email = (data.get('email') or "").strip().lower()
+    email = (data.get('email') or "").strip().lower()   # ✅ normalize
     service_type = data.get('subject')
     description = data.get('message')
 
     if not all([name, email, service_type, description]):
         return jsonify({'error': 'Missing fields'}), 400
 
-    # ✅ get allowed domain from env (fallback to @olx.com.lb)
+    # ✅ domain check via env (fallback to @olx.com.lb)
     allowed_domain = (os.getenv("ALLOWED_DOMAIN", "@olx.com.lb") or "").strip().lower()
+    print(f"🔎 EMAIL={repr(email)}  ALLOWED_DOMAIN={repr(allowed_domain)}")  # ✅ debug
 
-    # ✅ DEBUG: print exactly what we’re checking (repr shows hidden spaces)
-    print(f"🔎 EMAIL={repr(email)}  ALLOWED_DOMAIN={repr(allowed_domain)}")
-
-    # ✅ strict end-of-string match (regex) to avoid weird edge cases
-    import re
     if not re.search(re.escape(allowed_domain) + r'$', email):
-        return jsonify({
-            'status': 'forbidden',
-            'message': f'Only {allowed_domain} emails are allowed'
-        }), 403
+        return jsonify({'status': 'forbidden', 'message': f'Only {allowed_domain} emails are allowed'}), 403
 
     # ✅ NEW: Check for rapid duplicate submissions (same email within 10 seconds)
     now = time()
